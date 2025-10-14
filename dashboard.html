@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Financial Analytics Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+    body {
+      font-family: "Segoe UI", sans-serif;
+      margin: 20px;
+      background: #f4f6f7;
+      color: #2c3e50;
+    }
+    h1 {
+      text-align: center;
+      color: #d54c76;
+    }
+    .dash-title{
+      color: #d54c76;
+    }
+    .charts-container {
+      display: flex;
+      justify-content: space-around;
+      flex-wrap: wrap;
+      gap: 20px;
+      margin-bottom: 40px;
+    }
+    .chart-container {
+      flex: 1 1 300px;
+      background: white;
+      padding: 20px;
+      border-radius: 12px;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+      height: 300px;
+    }
+    table {
+      border-collapse: collapse;
+      width: 90%;
+      margin: 20px auto;
+      background: white;
+    }
+    th, td {
+      padding: 10px;
+      border: 1px solid #ddd;
+      text-align: left;
+    }
+    th {
+      background-color: #800000;
+      color: white;
+    }
+    .filters {
+      width: 90%;
+      margin: 0 auto 20px auto;
+      display: flex;
+      justify-content: center; /* center the whole row */
+      gap: 20px;
+      align-items: center;
+      flex-wrap: wrap; /* allows wrapping on small screens */
+    }
+
+    .filters label {
+      display: flex;
+      flex-direction: column; /* stack label and input */
+      font-weight: 500;
+      font-size: 14px;
+    }
+
+    .filters input[type="date"] {
+      padding: 6px 10px;
+      border-radius: 5px;
+      border: 1px solid #ccc;
+      font-size: 14px;
+      margin-top: 4px;
+      width: 150px; /* fixed width for alignment */
+    }
+
+    .filters button {
+      padding: 6px 14px;
+      border: none;
+      border-radius: 5px;
+      background-color: #800000;
+      color: white;
+      cursor: pointer;
+      font-size: 14px;
+      margin-top: 18px; /* aligns button vertically with inputs */
+    }
+    .pagination {
+      text-align: center;
+      margin: 10px;
+    }
+    .pagination button {
+      margin: 0 2px;
+      padding: 5px 10px;
+      border: none;
+      background: #800000;
+      color: white;
+      cursor: pointer;
+      border-radius: 4px;
+    }
+    .pagination button.active {
+      background: #d54c76;
+    }
+  </style>
+</head>
+<body>
+  <div style="display: flex; justify-content: flex-end; align-items: center; gap: 10px; margin: 20px;">
+    <!-- User image -->
+    <img id="userImage" src="images/photo.jpg" alt="User" style="width: 32px; height: 32px; border-radius: 50%; object-fit: cover;">
+
+    <!-- Welcome message -->
+    <h2 id="welcomeMsg" style="margin: 0; color:#1a5276; font-size: 16px;">Welcome!</h2>
+
+    <!-- Logout button -->
+    <button id="logoutBtn" style="padding: 6px 14px; background:#800000; color:white; border:none; border-radius:5px; cursor:pointer;">
+      Logout
+    </button>
+  </div>
+  <h1 class="dash-title color:#d54c76">Customer Financial Insights Dashboard</h1>
+
+  <div class="filters">
+    <label>From: <input type="date" id="startDate" /></label>
+    <label>To: <input type="date" id="endDate" /></label>
+    <button onclick="applyFilter()">Apply Filter</button>
+  </div>
+
+  <div class="charts-container">
+    <div class="chart-container">
+      <canvas id="healthChart"></canvas>
+    </div>
+    <div class="chart-container">
+      <canvas id="savingsChart"></canvas>
+    </div>
+    <div class="chart-container">
+      <canvas id="balanceChart"></canvas>
+    </div>
+    <div class="chart-container">
+      <canvas id="scoreGauge"></canvas>
+    </div>
+  </div>
+  <div class="chart-container">
+    <div style="width: 90%; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+      <h2 style="margin: 0; color:#d54c76;">Customer Summary</h2>
+      <button id="downloadBtn" style="padding: 6px 12px; background:#800000; color:white; border:none; border-radius:4px; cursor:pointer;">
+        &#x2B07; Download CSV
+      </button>
+    </div>
+    
+    <table id="summaryTable"></table>
+    <div class="pagination" id="pagination"></div>
+  </div>
+  <script>
+    let rawData = [];
+    let filteredData = [];
+    let currentPage = 1;
+    const rowsPerPage = 10;
+
+    let healthChartInstance, savingsChartInstance, balanceChartInstance;
+    let scoreGaugeInstance;
+
+    async function loadData() {
+      const response = await fetch("dashboard_data.json");
+      rawData = await response.json();
+      rawData = rawData.slice(0, 50);
+      filteredData = rawData.slice();
+      renderCharts(filteredData);
+      renderTable();
+    }
+
+    function renderCharts(data) {
+      // Destroy existing charts
+      if (scoreGaugeInstance) scoreGaugeInstance.destroy();
+      if (healthChartInstance) healthChartInstance.destroy();
+      if (savingsChartInstance) savingsChartInstance.destroy();
+      if (balanceChartInstance) balanceChartInstance.destroy();
+
+      const avgScore = (data.reduce((acc, d) => acc + (d.financial_score || 0), 0) / data.length).toFixed(1);
+
+      const ctx = document.getElementById("scoreGauge").getContext("2d");
+      scoreGaugeInstance = new Chart(ctx, {
+        type: "doughnut",
+        data: {
+          labels: ["Score", "Remaining"],
+          datasets: [{
+            data: [avgScore, 100 - avgScore],
+            backgroundColor: ["#800000", "#ecf0f1"],
+            borderWidth: 0
+          }]
+        },
+        options: {
+          circumference: 180,
+          rotation: -90,
+          cutout: "80%",
+          plugins: {
+            title: {
+              display: true,
+              text: `Average Financial Health Score: ${avgScore}/100`,
+              font: { size: 18 }
+            },
+            legend: { display: false }
+          }
+        }
+      });
+      // Pie chart: Financial health
+      const counts = { healthy: 0, at_risk: 0, neutral: 0 };
+      data.forEach(row => counts[row.label]++);
+
+      healthChartInstance = new Chart(document.getElementById("healthChart").getContext("2d"), {
+        type: "pie",
+        data: {
+          labels: ["Healthy", "At Risk", "Neutral"],
+          datasets: [{ data: [counts.healthy, counts.at_risk, counts.neutral],
+                       backgroundColor: ["#2ecc71", "#e74c3c", "#f1c40f"] }]
+        },
+        options: { responsive: true, maintainAspectRatio: false,
+          plugins: { title: { display: true, text: "Financial Health", font: { size: 18 } } }
+        }
+      });
+
+      // Bar chart: Savings
+      savingsChartInstance = new Chart(document.getElementById("savingsChart").getContext("2d"), {
+        type: "bar",
+        data: {
+          labels: data.map(d => d.Name),
+          datasets: [{ label: "Savings", data: data.map(d => d.Savings),
+                       backgroundColor: "#800000" }]
+        },
+        options: { responsive: true, maintainAspectRatio: false,
+          plugins: { title: { display: true, text: "Customer Savings", font: { size: 18 } } }
+        }
+      });
+
+      // Line chart: Balance
+      balanceChartInstance = new Chart(document.getElementById("balanceChart").getContext("2d"), {
+        type: "line",
+        data: {
+          labels: data.map(d => d.Name),
+          datasets: [{ label: "Balance", data: data.map(d => d.Balance),
+                       borderColor: "#9b59b6", fill: false }]
+        },
+        options: { responsive: true, maintainAspectRatio: false,
+          plugins: { title: { display: true, text: "Customer Balances", font: { size: 18 } } }
+        }
+      });
+    }
+
+    function renderTable() {
+      const table = document.getElementById("summaryTable");
+      const startIndex = (currentPage - 1) * rowsPerPage;
+      const endIndex = startIndex + rowsPerPage;
+      const pageData = filteredData.slice(startIndex, endIndex);
+
+      // Display selected columns only
+      const headers = ["Date","Name", "Email", "Savings", "Loans", "Balance", "label", "financial_score", "Consent","insight"];
+      let html = "<tr>" + headers.map(h => `<th>${h}</th>`).join("") + "</tr>";
+      pageData.forEach(row => {
+        html += "<tr>" + headers.map(h => `<td>${row[h]}</td>`).join("") + "</tr>";
+      });
+      table.innerHTML = html;
+
+      // Pagination
+      const pagination = document.getElementById("pagination");
+      const totalPages = Math.ceil(filteredData.length / rowsPerPage);
+      let pagHtml = "";
+      for(let i=1;i<=totalPages;i++){
+        pagHtml += `<button class="${i===currentPage?'active':''}" onclick="goToPage(${i})">${i}</button>`;
+      }
+      pagination.innerHTML = pagHtml;
+    }
+
+    function goToPage(page) {
+      currentPage = page;
+      renderTable();
+    }
+    function downloadCSV() {
+  // Headers
+    const headers = ["Date","Name", "Email", "Savings", "Loans", "Balance", "label", "financial_score", "Consent","insight"];
+  
+  // Convert filteredData to CSV
+  const rows = filteredData.map(row => headers.map(h => `"${row[h]}"`).join(","));
+  const csvContent = [headers.join(","), ...rows].join("\n");
+
+  // Create blob and download link
+  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "financial_data.csv";
+  a.click();
+  URL.revokeObjectURL(url);
+}
+//upload image dynamically
+// Attach to button
+document.getElementById("downloadBtn").addEventListener("click", downloadCSV);
+   function parseDateDDMMYYYY(dateStr) {
+    // Converts "28/08/2025" → Date(2025, 7, 28)
+    if (!dateStr || typeof dateStr !== "string") return null;
+    const [day, month, year] = dateStr.split("/").map(Number);
+    if (!day || !month || !year) return null;
+    return new Date(year, month - 1, day);
+  }
+
+   function applyFilter() {
+      const startInput = document.getElementById("startDate").value; // YYYY-MM-DD
+      const endInput = document.getElementById("endDate").value;
+
+      // Convert HTML date inputs to Date objects
+      const startDate = startInput ? new Date(startInput) : null;
+      const endDate = endInput ? new Date(endInput) : null;
+
+      filteredData = rawData.filter(item => {
+        const recordDate = parseDateDDMMYYYY(item.Date);
+        if (!recordDate) return false;
+
+        // Strip time components for consistent comparison
+        const d = new Date(recordDate.getFullYear(), recordDate.getMonth(), recordDate.getDate());
+
+        if (startDate && endDate) return d >= startDate && d <= endDate;
+        if (startDate) return d >= startDate;
+        if (endDate) return d <= endDate;
+        return true;
+      });
+
+      currentPage = 1;
+      renderCharts(filteredData);
+      renderTable();
+    }
+
+    loadData();
+
+    function getCookie(name) {
+      const value = `; ${document.cookie}`;
+      const parts = value.split(`; ${name}=`);
+      if (parts.length === 2) return parts.pop().split(';').shift();
+      return null;
+    }
+
+    async function loadUserName() {
+      const userId = getCookie("user_id");
+      if (!userId) return;
+      console.log("userId",userId)
+      try {
+        const response = await fetch(`http://127.0.0.1:8000/user?user_id=${userId}`);
+        if (response.ok) {
+          const data = await response.json();
+          document.getElementById("welcomeMsg").innerText = `Welcome, ${data.name}!`;
+        } else {
+          document.getElementById("welcomeMsg").innerText = "Welcome!";
+        }
+      } catch (err) {
+        console.error(err);
+        document.getElementById("welcomeMsg").innerText = "Welcome!";
+      }
+    }
+
+    // Call it after loadData()
+    loadUserName();
+    document.getElementById("logoutBtn").addEventListener("click", async () => {
+      const sessionId = getCookie("session_id"); // if you’re using session IDs
+      try {
+        await fetch("http://127.0.0.1:8000/logout", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ session_id: sessionId })
+        });
+      } catch (err) {
+        console.error("Logout failed:", err);
+      }
+
+      // Clear session/user cookies
+      document.cookie = "session_id=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+      document.cookie = "user_id=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+
+      // Redirect to login page
+      window.location.href = "login.html";
+    });
+  </script>
+</body>
+</html>

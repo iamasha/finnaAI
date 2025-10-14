@@ -1,0 +1,175 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>User Login</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: "Segoe UI", sans-serif;
+      background-color: #f4f6f7;
+      height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    .container {
+      display: flex;
+      width: 80%;
+      max-width: 900px;
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 6px 16px rgba(0, 0, 0, 0.1);
+      overflow: hidden;
+    }
+    .image-column {
+      flex: 1;
+      background: url("images/Absa-Bank.jpg")
+        no-repeat center center/cover;
+    }
+    .form-column {
+      flex: 1;
+      padding: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+    }
+    .login-box {
+      width: 100%;
+      max-width: 350px;
+    }
+    h2 {
+      text-align: center;
+      color: #800000;
+      margin-bottom: 20px;
+    }
+    form {
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+    }
+    input {
+      padding: 12px;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      font-size: 15px;
+    }
+    button {
+      padding: 12px;
+      background-color: #800000;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 16px;
+      cursor: pointer;
+      transition: 0.3s;
+    }
+    button:hover { background-color: #154360; }
+    p {
+      text-align: center;
+      margin-top: 10px;
+      font-size: 14px;
+    }
+    p a {
+      color: #800000;
+      text-decoration: none;
+      font-weight: bold;
+    }
+    p a:hover { text-decoration: underline; }
+    @media (max-width: 768px) {
+      .container { flex-direction: column; width: 90%; }
+      .image-column { height: 200px; }
+    }
+    #otpSection { display: none; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="image-column"></div>
+    <div class="form-column">
+      <div class="login-box">
+        <h2>Login</h2>
+        <form id="loginForm">
+          <input type="email" id="email" placeholder="Email" required />
+          <input type="password" id="password" placeholder="Password" required />
+
+          <!-- OTP Section -->
+          <!-- <div id="otpSection">
+            <label>Enter OTP:</label>
+            <input type="text" id="otpInput" maxlength="6">
+            <button type="button" id="verifyOtpBtn">Verify OTP</button>
+          </div> -->
+
+          <button type="submit">Login</button>
+        </form>
+        <p>Don't have an account? <a href="register.html">Register</a></p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    document.getElementById("loginForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+
+      const loginData = {
+        email: document.getElementById("email").value,
+        password: document.getElementById("password").value
+      };
+
+      try {
+        const response = await fetch("http://127.0.0.1:8000/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(loginData)
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+          if (data.otp_required) {
+            // OTP required flow
+            window.userIdForOtp = data.user_id;
+            document.getElementById("otpSection").style.display = "block";
+            alert("OTP sent to your email. Please enter it.");
+          } else {
+            // No OTP required
+            document.cookie = `user_id=${data.user_id}; path=/;`;
+            window.location.href = "dashboard.html";
+          }
+        } else {
+          alert("Login failed: " + (data.detail || "Invalid credentials"));
+        }
+      } catch (err) {
+        alert("Error connecting to server.");
+        console.error(err);
+      }
+    });
+
+    // Verify OTP
+    // document.getElementById("verifyOtpBtn").addEventListener("click", async () => {
+    //   const otp = document.getElementById("otpInput").value;
+    //   try {
+    //     const res = await fetch("http://127.0.0.1:8000/verify-otp", {
+    //       method: "POST",
+    //       headers: { "Content-Type": "application/json" },
+    //       body: JSON.stringify({ user_id: window.userIdForOtp, otp })
+    //     });
+    //     const data = await res.json();
+
+    //     if (data.status === "success") {
+    //       document.cookie = `user_id=${window.userIdForOtp}; path=/;`;
+    //       window.location.href = "dashboard.html";
+    //     } else {
+    //       alert(data.detail || "Invalid OTP");
+    //     }
+    //   } catch (err) {
+    //     alert("Error verifying OTP.");
+    //     console.error(err);
+    //   }
+    // });
+  </script>
+</body>
+</html>
