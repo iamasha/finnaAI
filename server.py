@@ -272,8 +272,6 @@
 #     init_db()
 #     PORT = int(os.environ.get('PORT', 8000))
 #     app.run(host='0.0.0.0', port=PORT)
-
-
 from flask import Flask, request, jsonify, send_from_directory
 import os
 import sqlite3
@@ -298,7 +296,7 @@ def send_email(to_email, subject, body):
     SMTP_HOST = "smtp.gmail.com"
     SMTP_PORT = 587
     SMTP_USER = os.environ.get("SMTP_USER", "hwakaasha@gmail.com")
-    SMTP_PASS = os.environ.get("SMTP_PASS", "your_app_password")
+    SMTP_PASS = os.environ.get("SMTP_PASS", "your_app_password")  # Update this!
 
     msg = EmailMessage()
     msg.set_content(body)
@@ -408,21 +406,51 @@ def dashboard_data():
             with open(CSV_FILE, 'r', encoding='utf-8') as f:
                 reader = csv.DictReader(f)
                 for row in reader:
-                    # Defensive programming: ensure these are never undefined
+                    # Parse and normalize fields
+                    raw_date = row.get('date', '')
+                    try:
+                        dt = datetime.strptime(raw_date, '%m/%d/%Y')
+                        formatted_date = dt.strftime('%d/%m/%Y')
+                    except Exception:
+                        formatted_date = raw_date or 'N/A'
+
                     savings = float(row.get('savings_balance') or 0)
                     loans = float(row.get('repayment_amount') or 0) + float(row.get('next_loan_due_amount') or 0)
                     balance = float(row.get('account_balance') or 0)
-                    
+
+                    # Basic scoring logic (matches previous behavior)
+                    financial_score = 100
+                    insight = 'Great financial health.'
+                    label = 'healthy'
+
+                    if savings == 0:
+                        financial_score -= 20
+                        insight = 'No active savings detected. Consider creating a savings plan.'
+                        label = 'neutral'
+
+                    if loans > (savings + balance) * 0.5:
+                        financial_score -= 40
+                        insight = 'High debt-to-assets ratio. Focus on clearing active loans.'
+                        label = 'at_risk'
+
+                    if row.get('repayment_status') == 'missed':
+                        financial_score -= 30
+                        insight = 'Missed loan repayment detected. Immediate action required!'
+                        label = 'at_risk'
+
+                    if financial_score < 0:
+                        financial_score = 0
+
                     sample_data.append({
-                        'Date': row.get('date', 'N/A'),
-                        'Name': f"{row.get('first_name','')} {row.get('last_name','')}".strip(),
+                        'Date': formatted_date,
+                        'Name': f"{row.get('first_name','')} {row.get('last_name','')}",
                         'Email': row.get('email', 'N/A'),
                         'Savings': savings,
                         'Loans': loans,
                         'Balance': balance,
-                        'label': row.get('label', 'neutral'),
-                        'financial_score': int(row.get('financial_score', 0)),
-                        'insight': row.get('insight', 'No data')
+                        'label': label,
+                        'financial_score': int(financial_score),
+                        'insight': insight
                     })
             print(f"DEBUG: Successfully loaded {len(sample_data)} rows.")
         except Exception as e:
@@ -461,3 +489,8 @@ def root():
 @app.route('/<path:filename>')
 def static_files(filename):
     return send_from_directory(BASE_DIR, filename)
+
+# ADD THIS BLOCK AT THE END
+# if __name__ == '__main__':
+#     PORT = int(os.environ.get('PORT', 8000))
+#     app.run(host='0.0.0.0', port=PORT, debug=True)
