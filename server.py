@@ -274,14 +274,13 @@
 #     app.run(host='0.0.0.0', port=PORT)
 
 
-
-
 from flask import Flask, request, jsonify, send_from_directory
 import os
 import sqlite3
 import smtplib
 import uuid
 import random
+import csv
 from datetime import datetime, timedelta
 from email.message import EmailMessage
 
@@ -294,7 +293,7 @@ OTP_EXPIRY_MINUTES = 5
 
 app = Flask(__name__, static_folder='.', static_url_path='')
 
-# --- SMTP EMAIL ---
+# --- HELPER FUNCTIONS ---
 def send_email(to_email, subject, body):
     SMTP_HOST = "smtp.gmail.com"
     SMTP_PORT = 587
@@ -312,40 +311,22 @@ def send_email(to_email, subject, body):
         server.login(SMTP_USER, SMTP_PASS)
         server.send_message(msg)
 
-# --- DB Setup ---
 def init_db():
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS users (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT,
-        email TEXT UNIQUE,
-        phone TEXT,
-        password TEXT
-    )
-    """)
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS otp_codes (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id INTEGER,
-        code TEXT,
-        expires_at TEXT
-    )
-    """)
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS sessions (
-        session_id TEXT PRIMARY KEY,
-        user_id INTEGER
-    )
-    """)
+    cursor.execute("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, email TEXT UNIQUE, phone TEXT, password TEXT)")
+    cursor.execute("CREATE TABLE IF NOT EXISTS otp_codes (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, code TEXT, expires_at TEXT)")
+    cursor.execute("CREATE TABLE IF NOT EXISTS sessions (session_id TEXT PRIMARY KEY, user_id INTEGER)")
     conn.commit()
     conn.close()
+
+# Initialize DB on load
+init_db()
 
 def get_db_connection():
     return sqlite3.connect(DB_FILE)
 
-# --- Routes ---
+# --- ROUTES ---
 @app.route('/register', methods=['POST'])
 def register():
     data = request.get_json(silent=True)
@@ -423,15 +404,40 @@ def verify_otp():
 def dashboard_data():
     sample_data = []
     try:
-        import csv
-        with open(CSV_FILE, 'r', encoding='utf-8') as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                # ... [Keep your existing logic here for brevity] ...
-                sample_data.append({"id": row.get("customer_id"), "Name": row.get("first_name")})
+        if os.path.exists(CSV_FILE):
+            with open(CSV_FILE, 'r', encoding='utf-8') as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    savings = float(row.get('savings_balance', 0) or 0)
+                    loans = float(row.get('repayment_amount', 0) or 0) + float(row.get('next_loan_due_amount', 0) or 0)
+                    balance = float(row.get('account_balance', 0) or 0)
+                    
+                    financial_score = 100
+                    if savings == 0: financial_score -= 20
+                    if loans > (savings + balance) * 0.5: financial_score -= 40
+                    
+                    sample_data.append({
+                        'id': row.get('customer_id', ''),
+                        'Name': f"{row.get('first_name','')} {row.get('last_name','')}",
+                        'Savings': savings,
+                        'Loans': loans,
+                        'Balance': balance,
+                        'financial_score': max(0, financial_score)
+                    })
     except Exception as e:
         app.logger.warning('Error loading CSV: %s', e)
     return jsonify(sample_data)
+
+@app.route('/user', methods=['GET'])
+def get_user():
+    user_id = request.args.get('user_id')
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT name, email FROM users WHERE id=?", (user_id,))
+    row = cursor.fetchone()
+    conn.close()
+    if row: return jsonify({'name': row[0], 'email': row[1]})
+    return jsonify({'detail': 'User not found'}), 404
 
 @app.route('/')
 def root():
@@ -440,5 +446,3 @@ def root():
 @app.route('/<path:filename>')
 def static_files(filename):
     return send_from_directory(BASE_DIR, filename)
-
-# Note: We do NOT need app.run() here for PythonAnywherecls
