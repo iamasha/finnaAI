@@ -431,6 +431,15 @@ def dashboard_data():
         print(f"DEBUG: CSV_FILE not found at {CSV_FILE}")
     return jsonify(sample_data)
 
+@app.route('/debug/users', methods=['GET'])
+def debug_users():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, name, email FROM users")
+    users = cursor.fetchall()
+    conn.close()
+    return jsonify([{'id': u[0], 'name': u[1], 'email': u[2]} for u in users])
+
 @app.route('/user', methods=['GET'])
 def get_user():
     user_id = request.args.get('user_id')
