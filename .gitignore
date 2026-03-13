@@ -1,30 +1,26 @@
-# create_gitignore.py
-content = """
-# Ignore environment variables
-.env
-
-# Ignore Python cache and compiled files
+# Byte-compiled / optimized / DLL files
 __pycache__/
-*.pyc
-*.pyo
-*.pyd
+*.py[cod]
+*$py.class
 
-# Ignore virtual environments
-venv/
+# Environments
+.env
+.venv
 env/
-myvenv
+venv/
+ENV/
+env.bak/
+venv.bak/
 
-# Ignore data files
-dashboard_data.json
-*.csv
-*.xlsx
+# SQLite databases
+*.db
+*.sqlite3
 
-# Ignore OS files
+# OS generated files
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
 Thumbs.db
-"""
-
-with open(".gitignore", "w") as f:
-    f.write(content.strip())
-
-print(".gitignore file created successfully ✅")

@@ -1,4 +1,4 @@
-import http.server, json, sqlite3, smtplib, uuid, random
+import os, http.server, json, sqlite3, smtplib, uuid, random
 from urllib.parse import urlparse, parse_qs
 from datetime import datetime, timedelta
 from email.message import EmailMessage
@@ -10,8 +10,8 @@ OTP_EXPIRY_MINUTES = 5
 def send_email(to_email, subject, body):
     SMTP_HOST = "smtp.gmail.com"
     SMTP_PORT = 587
-    SMTP_USER = "hwakaasha@gmail.com"
-    SMTP_PASS = 'your_app_password'
+    SMTP_USER = os.environ.get("SMTP_USER", "hwakaasha@gmail.com")
+    SMTP_PASS = os.environ.get("SMTP_PASS", "your_app_password")
 
     msg = EmailMessage()
     msg.set_content(body)
@@ -162,6 +162,69 @@ class RequestHandler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
         parsed = urlparse(self.path)
         qs = parse_qs(parsed.query)
+        
+        # Serve dashboard data
+        if parsed.path == "/dashboard_data.json":
+            sample_data = []
+            try:
+                import csv
+                from datetime import datetime
+                with open("dummy.csv", "r", encoding="utf-8") as f:
+                    reader = csv.DictReader(f)
+                    for row in reader:
+                        # Parse date from M/D/YYYY to DD/MM/YYYY for frontend parser
+                        raw_date = row.get("date", "")
+                        try:
+                            dt = datetime.strptime(raw_date, "%m/%d/%Y")
+                            formatted_date = dt.strftime("%d/%m/%Y")
+                        except ValueError:
+                            formatted_date = raw_date
+                        
+                        savings = float(row.get("savings_balance", 0))
+                        loans = float(row.get("repayment_amount", 0)) + float(row.get("next_loan_due_amount", 0))
+                        balance = float(row.get("account_balance", 0))
+                        
+                        # Basic Mock Logic
+                        financial_score = 100
+                        insight = "Great financial health."
+                        label = "healthy"
+                        
+                        if savings == 0:
+                            financial_score -= 20
+                            insight = "No active savings detected. Consider creating a savings plan."
+                            label = "neutral"
+                        
+                        if loans > (savings + balance) * 0.5:
+                            financial_score -= 40
+                            insight = "High debt-to-assets ratio. Focus on clearing active loans."
+                            label = "at_risk"
+                            
+                        if row.get("repayment_status") == "missed":
+                            financial_score -= 30
+                            insight = "Missed loan repayment detected. Immediate action required!"
+                            label = "at_risk"
+
+                        if financial_score < 0: financial_score = 0
+                            
+                        sample_data.append({
+                            "id": row.get("customer_id", ""),
+                            "Name": f"{row.get('first_name', '')} {row.get('last_name', '')}",
+                            "Email": f"{row.get('first_name', '').lower()}@example.com",
+                            "financial_score": financial_score,
+                            "Savings": savings,
+                            "Loans": loans,
+                            "Balance": balance,
+                            "label": label,
+                            "insight": insight,
+                            "Consent": row.get("marketing_consent", "N"),
+                            "Date": formatted_date
+                        })
+            except Exception as e:
+                print("Error loading CSV:", e)
+                # Fallback empty or default data
+                sample_data = []
+            return self._send_json(200, sample_data)
+        
         if parsed.path == "/user":
             user_id = qs.get("user_id",[None])[0]
             if user_id:
@@ -182,6 +245,7 @@ class RequestHandler(http.server.SimpleHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    PORT = 8000
+    import os
+    PORT = int(os.environ.get("PORT", 8000))
     print(f"Server running on port {PORT}...")
-    http.server.HTTPServer(("", PORT), RequestHandler).serve_forever()
+    http.server.HTTPServer(("0.0.0.0", PORT), RequestHandler).serve_forever()
