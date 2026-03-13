@@ -404,48 +404,45 @@ def verify_otp():
 def dashboard_data():
     sample_data = []
     if os.path.exists(CSV_FILE):
-        with open(CSV_FILE, 'r', encoding='utf-8') as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                savings = float(row.get('savings_balance') or 0)
-                loans = float(row.get('repayment_amount') or 0) + float(row.get('next_loan_due_amount') or 0)
-                balance = float(row.get('account_balance') or 0)
-                
-                # Logic to prevent undefined values
-                financial_score = 100
-                label = 'healthy'
-                insight = 'Great financial health.'
-                if savings == 0: 
-                    financial_score -= 20
-                    label = 'neutral'
-                    insight = 'Create a savings plan.'
-                
-                sample_data.append({
-                    'Date': row.get('date', 'N/A'),
-                    'Name': f"{row.get('first_name','')} {row.get('last_name','')}",
-                    'Email': f"{row.get('first_name','').lower()}@gmail.com",
-                    'Savings': savings,
-                    'Loans': loans,
-                    'Balance': balance,
-                    'label': label,
-                    'financial_score': financial_score,
-                    'insight': insight
-                })
+        try:
+            with open(CSV_FILE, 'r', encoding='utf-8') as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    # Defensive programming: ensure these are never undefined
+                    savings = float(row.get('savings_balance') or 0)
+                    loans = float(row.get('repayment_amount') or 0) + float(row.get('next_loan_due_amount') or 0)
+                    balance = float(row.get('account_balance') or 0)
+                    
+                    sample_data.append({
+                        'Date': row.get('date', 'N/A'),
+                        'Name': f"{row.get('first_name','')} {row.get('last_name','')}".strip(),
+                        'Email': row.get('email', 'N/A'),
+                        'Savings': savings,
+                        'Loans': loans,
+                        'Balance': balance,
+                        'label': row.get('label', 'neutral'),
+                        'financial_score': int(row.get('financial_score', 0)),
+                        'insight': row.get('insight', 'No data')
+                    })
+            print(f"DEBUG: Successfully loaded {len(sample_data)} rows.")
+        except Exception as e:
+            print(f"DEBUG: ERROR reading CSV: {e}")
+    else:
+        print(f"DEBUG: CSV_FILE not found at {CSV_FILE}")
     return jsonify(sample_data)
 
 @app.route('/user', methods=['GET'])
 def get_user():
     user_id = request.args.get('user_id')
-    if not user_id: return jsonify({'detail': 'Missing user_id'}), 400
-    
+    print(f"DEBUG: Fetching user_id: {user_id}")
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute("SELECT name, email FROM users WHERE id=?", (user_id,))
     row = cursor.fetchone()
     conn.close()
-    
     if row:
         return jsonify({'name': row[0], 'email': row[1]})
+    print(f"DEBUG: User {user_id} not found in DB.")
     return jsonify({'detail': 'User not found'}), 404
 
 @app.route('/')
